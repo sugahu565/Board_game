@@ -6,11 +6,13 @@ data class MoveLog(
     val cardName: String
 )
 
-class Move(val initiator: Player,
-           val target: Player?,
-           val playerCard: Card,
-           val additionalData: Map<Player, Card>? = null) {
-
+class Move(
+    val initiator: Player,
+    val target: Player?,
+    val playerCard: Card,
+    // Доп данные — например, угадываемый игрок
+    val additionalData: Map<Player, List<Card>>? = null
+) {
     fun toLog(): MoveLog {
         return MoveLog(
             initiatorUID = initiator.UID,

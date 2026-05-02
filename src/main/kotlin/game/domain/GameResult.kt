@@ -1,7 +1,6 @@
 package game.domain
 
 data class GameResult(
-    val winnerName: String,
-    val winnerUID: Int,
+    val winners: List<Player>,
     val history: List<List<MoveLog>>
 )
