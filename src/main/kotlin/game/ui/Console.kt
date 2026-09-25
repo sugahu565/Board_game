@@ -1,5 +1,7 @@
 package game.ui
 
+import game.data.PlayerStatistics
+import game.data.StoredGame
 import game.logic.Output
 import game.logic.Input
 import game.domain.*
@@ -31,6 +33,31 @@ class Console : Output, Input {
 
     override fun showError(message: String) {
         println("ОШИБКА: $message")
+    }
+
+    override fun showGameSaved(gameId: Int) {
+        println("Партия #$gameId сохранена в базу данных.")
+    }
+
+    override fun showHistory(history: List<StoredGame>) {
+        println("\nПоследние партии:")
+        history.take(5).forEach { game ->
+            val date = Instant.ofEpochMilli(game.playedAt)
+                .atZone(ZoneId.systemDefault())
+                .format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+            val winners = game.players.filter { it.winner }.joinToString { it.name }
+            println("#${game.id} | $date | победители: $winners")
+        }
+    }
+
+    override fun showStats(statistics: List<PlayerStatistics>) {
+        println("\nСтатистика игроков:")
+        statistics.forEach { stat ->
+            println(
+                "${stat.name}: игр ${stat.gamesPlayed}, побед ${stat.wins}, " +
+                    "очков ${stat.totalScore}, среднее %.2f".format(stat.averageScore)
+            )
+        }
     }
 
     override fun inputPlayers(): List<Player> {
