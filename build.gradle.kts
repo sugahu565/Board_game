@@ -35,3 +35,9 @@ application {
 tasks.named<JavaExec>("run") {
     standardInput = System.`in`
 }
+
+tasks.register<JavaExec>("runGui") {
+    group = "application"
+    mainClass.set("game.ui.DesktopMainKt")
+    classpath = sourceSets.main.get().runtimeClasspath
+}
