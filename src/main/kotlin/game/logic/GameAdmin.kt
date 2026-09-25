@@ -1,8 +1,10 @@
 package game.logic
 
+import game.data.GameRepository
 import game.domain.*
 
 class GameAdmin(
+    private val gameRepository: GameRepository,
     private val input: Input,
     private val output: Output,
     private val gameFactory: (List<Player>) -> Game = { Game(it) }
@@ -23,5 +25,10 @@ class GameAdmin(
                 }
             }
         }
+
+        val gameId = gameRepository.writeGame(game.getResult())
+        output.showGameSaved(gameId)
+        output.showHistory(gameRepository.getHistory())
+        output.showStats(gameRepository.getStats())
     }
 }
