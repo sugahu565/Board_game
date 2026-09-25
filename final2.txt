@@ -1,0 +1,150 @@
+@startuml
+title Общая архитектура игры и хранения результатов
+!theme plain
+skinparam classAttributeIconSize 0
+hide empty members
+
+package "Domain Layer" {
+    class Game {
+        - players: List<Player>
+        - round: Round?
+        - scores: Map<Player, Int>
+        + processGameMove(move: Move): GameMoveResult
+        + getResult(): GameResult
+    }
+
+    class Round {
+        + deck: Deck
+        - history: MutableList<Move>
+        - currentPlayerIndex: Int
+        + status: RoundStatus
+        + checkMove(move: Move): String?
+        + recordMove(move: Move, result: MoveResult)
+    }
+
+    class Player {
+        + UID: Int
+        + name: String
+        - hand: List<Card>
+        + getCards(): List<Card>
+    }
+
+    class Deck {
+        - cards: List<Card>
+        + nextCard(): Card
+    }
+
+    class Move {
+        + initiator: Player
+        + target: Player?
+        + playerCard: Card
+        + details: MoveDetails
+    }
+    interface MoveDetails <<sealed>>
+    interface MoveResult <<sealed>>
+    interface GameMoveResult <<sealed>>
+    interface MoveEvent <<sealed>>
+    class GameResult
+
+    abstract class Card {
+        + title: String
+        + description: String
+        + effect: CardEffect
+    }
+    abstract class Monster {
+        + canBeKilledByHunter(turn: Int, playedHunters: Int): Boolean
+    }
+    abstract class Hunter
+    interface CardEffectHandler {
+        + validate(move: Move, round: Round): String?
+        + apply(move: Move, round: Round): MoveResult
+    }
+}
+
+package "App Logic Layer" {
+    interface Input {
+        + inputMove(game: Game): Move
+    }
+    interface Output {
+        + showError(message: String)
+        + showMoveEvent(event: MoveEvent)
+        + showRoundResult(status: RoundStatus)
+        + showGameResult(game: Game)
+    }
+    class GameAdmin {
+        + runGame()
+    }
+}
+
+package "Data Layer" {
+    interface GameRepository {
+        + registerPlayer(name: String): Unit
+        + writeGame(result: GameResult): Int
+        + getHistory(): List<StoredGame>
+        + getStats(): List<PlayerStatistics>
+        + deleteGame(gameId: Int): Boolean
+    }
+    class SqliteGameRepository
+    class "SQLite file" as SQLite <<database>>
+}
+
+package "Input Layer" {
+    class Console
+}
+
+package "GUI Layer" {
+    class DesktopMain
+    class DesktopWindow
+    class DesktopGameController {
+        + addPlayer(name: String): Unit
+        + startGame(): Unit
+        + submitMove(cardIndex: Int, targetUid: Int?, details: MoveDetails): GameMoveResult
+    }
+}
+
+Console ..|> Input
+Console ..|> Output
+DesktopMain --> DesktopWindow : создаёт
+DesktopMain --> DesktopGameController : создаёт
+DesktopWindow --> DesktopGameController : клики игрока
+DesktopGameController --> Game : ход
+DesktopGameController --> GameRepository : реестр, история, результат
+GameAdmin --> Input
+GameAdmin --> Output
+GameAdmin --> Game
+GameAdmin --> GameRepository
+SqliteGameRepository ..|> GameRepository
+SqliteGameRepository --> SQLite : Exposed / JDBC
+Game *-- Round
+Game --> CardEffectHandler
+Game --> GameResult
+Round *-- Deck
+Round o-- Player
+CardEffectHandler --> Round
+CardEffectHandler --> Monster
+Move --> MoveDetails
+Card <|-- Monster
+Card <|-- Hunter
+@enduml
+
+@startuml
+title GUI — путь от окна к существующей игре и базе
+!theme plain
+left to right direction
+
+component "DesktopMain" as Main
+component "DesktopWindow" as Window
+component "DesktopGameController" as Controller
+component "Game" as Game
+interface "GameRepository" as Repository
+component "SqliteGameRepository" as Sqlite
+database "SQLite" as DB
+
+Main --> Window : создаёт
+Main --> Controller : создаёт
+Window --> Controller : действия игрока
+Controller --> Game : Move
+Controller --> Repository : игроки и результаты
+Sqlite ..|> Repository
+Sqlite --> DB
+@enduml

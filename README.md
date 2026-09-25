@@ -1,3 +1,6 @@
 # Игра: Монстр по соседству
 
-Запуск: `./gradlew run`
+Запуск:
+
+- Консоль: `./gradlew run`
+- GUI: `./gradlew runGui`

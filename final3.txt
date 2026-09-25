@@ -1,0 +1,692 @@
+@startuml
+title final3 — ход игры и состояние
+!theme plain
+top to bottom direction
+skinparam classAttributeIconSize 0
+hide empty members
+
+package "game.logic" {
+    class GameAdmin {
+        - gameRepository: GameRepository
+        - input: Input
+        - output: Output
+        - gameFactory: (List<Player>) -> Game
+        + runGame(): Unit
+    }
+    interface Input {
+        + inputPlayers(): List<Player>
+        + inputMove(game: Game): Move
+    }
+    interface Output {
+        + showGameState(game: Game, roundNumber: Int): Unit
+        + showGameResult(game: Game): Unit
+        + showRoundResult(status: RoundStatus): Unit
+        + showMoveEvent(event: MoveEvent): Unit
+        + showError(message: String): Unit
+        + showGameSaved(gameId: Int): Unit
+        + showHistory(history: List<StoredGame>): Unit
+        + showStats(statistics: List<PlayerStatistics>): Unit
+    }
+}
+
+package "game.ui" {
+    class DesktopMainKt <<runGui>> {
+        + main(): Unit
+    }
+    class DesktopWindow {
+        - controller: DesktopGameController
+        - render(): Unit
+        - renderLobby(): Unit
+        - renderGame(): Unit
+        - play(index: Int): Unit
+    }
+    class DesktopGameController {
+        - repository: GameRepository
+        + selectedNames: Set<String>
+        + game: Game?
+        + handVisible: Boolean
+        + addPlayer(name: String): Unit
+        + startGame(): Unit
+        + submitMove(cardIndex: Int, targetUid: Int?, details: MoveDetails): GameMoveResult
+    }
+    class Console {
+        + inputPlayers(): List<Player>
+        + inputMove(game: Game): Move
+        + showGameState(game: Game, roundNumber: Int): Unit
+        + showGameResult(game: Game): Unit
+        + showRoundResult(status: RoundStatus): Unit
+        + showMoveEvent(event: MoveEvent): Unit
+        + showError(message: String): Unit
+        + showGameSaved(gameId: Int): Unit
+        + showHistory(history: List<StoredGame>): Unit
+        + showStats(statistics: List<PlayerStatistics>): Unit
+        - collectMoveDetails(card: Card, initiator: Player, target: Player?, allPlayers: List<Player>): MoveDetails
+        - selectCards(player: Player, promptMsg: String, playedCard: Card?): List<Card>
+    }
+}
+
+package "game.domain" {
+    class Game {
+        - players: List<Player>
+        - effectHandler: CardEffectHandler
+        - round: Round?
+        - roundNumber: Int
+        - moveHistory: MutableList<List<MoveLog>>
+        - scores: MutableMap<Player, Int>
+        + status: GameStatus {readOnly}
+        + {static} TOTAL_ROUNDS: Int = 1
+        - startNextRound(): Unit
+        - updateScores(round: Round): Unit
+        + processGameMove(move: Move): GameMoveResult
+        + getScores(): Map<Player, Int>
+        + getResult(): GameResult
+        + getCurrentPlayer(): Player
+        + getAllPlayers(): List<Player>
+        + getRoundNumber(): Int
+        + getCurrentTurn(): Int
+    }
+    enum GameStatus {
+        STAGED
+        IN_PROGRESS
+        FINISHED
+    }
+
+    class Round {
+        - players: List<Player>
+        + deck: Deck
+        - currentPlayerIndex: Int
+        - startPlayerIndex: Int
+        - currentTurn: Int
+        - history: MutableList<Move>
+        + status: RoundStatus {readOnly}
+        + checkMove(move: Move): String?
+        + recordMove(move: Move, result: MoveResult): Unit
+        - nextPlayer(): Unit
+        + getCurrentTurn(): Int
+        + getCurrentPlayer(): Player
+        + getMoveLog(): List<MoveLog>
+        + getPlayers(): List<Player>
+        + countPlayedCards(predicate: (Card) -> Boolean): Int
+        + finishWithMonsterWin(): Unit
+        + finishWithHuntersWin(): Unit
+    }
+    enum RoundStatus {
+        IN_PROGRESS
+        MONSTER_WON
+        HUNTERS_WON
+    }
+
+    class Player {
+        + UID: Int
+        + name: String
+        - hand: MutableList<Card>
+        - discarded: MutableList<Card>
+        - played: MutableList<Card>
+        + addCard(card: Card): Unit
+        + removeCard(card: Card): Unit
+        + playCard(card: Card): Unit
+        + discardCard(card: Card): Unit
+        + getCards(): List<Card>
+        + getDiscarded(): List<Card>
+        + getPlayed(): List<Card>
+        + hasMonsterCard(): Boolean
+        + hasHideCard(): Boolean
+        + hasCard(card: Card): Int
+        + resetForRound(): Unit
+    }
+    class Deck {
+        - playerCount: Int
+        - cards: MutableList<Card>
+        - availableMonsters: List<Monster>
+        - buildAndShuffleDeck(): Unit
+        + nextCard(): Card
+        + isEmpty(): Boolean
+    }
+
+    class Move {
+        + initiator: Player
+        + target: Player?
+        + playerCard: Card
+        + details: MoveDetails
+        + toLog(): MoveLog
+    }
+    class MoveLog <<data>> {
+        + initiatorUID: Int
+        + targetUID: Int?
+        + cardName: String
+    }
+    class CardChoice <<data>> {
+        + player: Player
+        + card: Card
+    }
+    interface MoveDetails <<sealed>>
+    class "MoveDetails.None" as DetailsNone <<data object>>
+    class "MoveDetails.Theft" as DetailsTheft <<data>> {
+        + cardToGive: Card?
+    }
+    class "MoveDetails.Trade" as DetailsTrade <<data>> {
+        + initiatorCards: List<Card>
+        + targetCards: List<Card>
+    }
+    class "MoveDetails.Fog" as DetailsFog <<data>> {
+        + choices: List<CardChoice>
+    }
+    class "MoveDetails.Gossip" as DetailsGossip <<data>> {
+        + choices: List<CardChoice>
+    }
+    class "MoveDetails.Hound" as DetailsHound <<data>> {
+        + cardToDiscard: Card?
+    }
+
+    interface MoveResult <<sealed>>
+    class "MoveResult.Rejected" as MoveRejected <<data>> {
+        + message: String
+    }
+    class "MoveResult.Applied" as MoveApplied <<data>> {
+        + roundStatus: RoundStatus
+        + event: MoveEvent?
+    }
+    interface GameMoveResult <<sealed>>
+    class "GameMoveResult.Rejected" as GameMoveRejected <<data>> {
+        + message: String
+    }
+    class "GameMoveResult.MoveApplied" as GameMoveApplied <<data>> {
+        + event: MoveEvent?
+    }
+    class "GameMoveResult.RoundFinished" as GameRoundFinished <<data>> {
+        + roundStatus: RoundStatus
+        + gameFinished: Boolean
+        + event: MoveEvent?
+    }
+    interface MoveEvent <<sealed>>
+    class "MoveEvent.CardsRevealed" as CardsRevealed <<data>> {
+        + player: Player
+        + cards: List<Card>
+    }
+    class GameResult <<data>> {
+        + winners: List<Player>
+        + history: List<List<MoveLog>>
+        + scores: Map<Player, Int>
+    }
+
+    interface CardEffectHandler {
+        + validate(move: Move, round: Round): String?
+        + apply(move: Move, round: Round): MoveResult
+    }
+    class DefaultCardEffectHandler {
+        + validate(move: Move, round: Round): String?
+        + apply(move: Move, round: Round): MoveResult
+        - applied(event: MoveEvent?): MoveResult.Applied
+        - validateTheft(move: Move): String?
+        - validateTrade(move: Move): String?
+        - validateChoices(move: Move, round: Round, includeInitiator: Boolean): String?
+        - validateHound(move: Move): String?
+        - validateWerewolf(round: Round): String?
+        - validateMandragora(round: Round): String?
+        - applyRumors(round: Round): MoveEvent?
+        - applyTheft(move: Move): MoveEvent?
+        - applyGossip(move: Move, round: Round): MoveEvent?
+        - applyFog(move: Move): MoveEvent?
+        - applyTrade(move: Move): MoveEvent?
+        - applyFriend(move: Move, round: Round): MoveEvent?
+        - applyHunter(move: Move, round: Round): MoveResult.Applied
+        - applyHound(move: Move): MoveResult.Applied
+        - ownsAll(player: Player, cards: List<Card>): Boolean
+        - {static} fourthTurnDisabledEffects: Set<CardEffect>
+    }
+    abstract class Card
+    enum CardEffect
+}
+
+package "game.domain.cards" {
+    abstract class Monster
+}
+
+package "game.data" {
+    interface GameRepository {
+        + registerPlayer(name: String): Unit
+        + writeGame(result: GameResult): Int
+        + getHistory(): List<StoredGame>
+        + getStats(): List<PlayerStatistics>
+        + deleteGame(gameId: Int): Boolean
+    }
+    class SqliteGameRepository
+    class StoredGame <<data>> {
+        + id: Int
+        + playedAt: Long
+        + players: List<StoredPlayerResult>
+        + history: List<List<MoveLog>>
+    }
+    class StoredPlayerResult <<data>> {
+        + uid: Int
+        + name: String
+        + score: Int
+        + winner: Boolean
+    }
+    class PlayerStatistics <<data>> {
+        + name: String
+        + gamesPlayed: Int
+        + wins: Int
+        + totalScore: Int
+        + averageScore: Double {readOnly}
+    }
+}
+
+Console ..|> Input
+Console ..|> Output
+DesktopMainKt --> DesktopWindow : создаёт окно
+DesktopMainKt --> DesktopGameController : создаёт контроллер
+DesktopMainKt --> SqliteGameRepository : открывает базу
+DesktopWindow --> DesktopGameController : события кнопок
+DesktopWindow ..> Game : читает состояние для показа
+DesktopGameController --> Game : создаёт и вызывает processGameMove
+DesktopGameController --> GameRepository : игроки, история, сохранение
+GameAdmin --> Input
+GameAdmin --> Output
+GameAdmin --> GameRepository
+GameAdmin --> Game
+Game *-- Round
+Game o-- Player
+Game --> CardEffectHandler
+Game --> GameResult
+Game --> GameStatus
+Round *-- Deck
+Round o-- Player
+Round --> RoundStatus
+Round --> Move
+DefaultCardEffectHandler ..|> CardEffectHandler
+DefaultCardEffectHandler --> Round
+DefaultCardEffectHandler --> MoveResult
+DefaultCardEffectHandler --> Monster
+Move --> MoveDetails
+Move --> MoveLog
+MoveDetails <|.. DetailsNone
+MoveDetails <|.. DetailsTheft
+MoveDetails <|.. DetailsTrade
+MoveDetails <|.. DetailsFog
+MoveDetails <|.. DetailsGossip
+MoveDetails <|.. DetailsHound
+MoveResult <|.. MoveRejected
+MoveResult <|.. MoveApplied
+GameMoveResult <|.. GameMoveRejected
+GameMoveResult <|.. GameMoveApplied
+GameMoveResult <|.. GameRoundFinished
+MoveEvent <|.. CardsRevealed
+SqliteGameRepository ..|> GameRepository
+@enduml
+
+@startuml
+title final3 — карты
+!theme plain
+top to bottom direction
+skinparam classAttributeIconSize 0
+hide empty members
+
+package "game.domain" {
+    abstract class Card {
+        + winPoints: Int
+        + role: CardRole
+        + title: String
+        + description: String
+        + effect: CardEffect
+        + requiresTarget: Boolean
+    }
+    enum CardRole {
+        NEUTRAL
+        MONSTER
+        FRIEND
+        HUNTER
+        HIDE
+    }
+    enum CardEffect {
+        SEARCH
+        VILLAGER
+        RUMORS
+        THEFT
+        INVESTIGATION
+        GOSSIP
+        FOG
+        TRADE
+        HOUND
+        FRIEND
+        HIDE
+        HUNTER
+        VAMPIRE
+        KUMIHO
+        WEREWOLF
+        MANDRAGORA
+        MERMAID
+    }
+}
+
+package "game.domain.cards" {
+    abstract class Action
+    abstract class Friend {
+        + winPoints: Int = 1
+        + role: CardRole = FRIEND
+    }
+    abstract class Hide {
+        + role: CardRole = HIDE
+    }
+    abstract class Hunter {
+        + winPoints: Int = 2
+        + role: CardRole = HUNTER
+    }
+    abstract class Monster {
+        + winPoints: Int = 2
+        + role: CardRole = MONSTER
+        + canBeKilledByHunter(turn: Int, playedHunters: Int): Boolean
+    }
+    class SearchCard <<object>>
+    class Villager <<object>>
+    class RumorsCard <<object>>
+    class TheftCard <<object>>
+    class InvestigationCard <<object>>
+    class GossipCard <<object>>
+    class FogCard <<object>>
+    class TradeCard <<object>>
+    class HoundCard <<object>>
+    class FriendCard <<object>>
+    class HideCard <<object>>
+    class HunterCard <<object>>
+    class VampireCard <<object>> {
+        + winPoints: Int = 3
+    }
+    class KumihoCard <<object>> {
+        + canBeKilledByHunter(turn: Int, playedHunters: Int): Boolean
+    }
+    class WerewolfCard <<object>>
+    class MandragoraCard <<object>>
+    class MermaidCard <<object>> {
+        + canBeKilledByHunter(turn: Int, playedHunters: Int): Boolean
+    }
+}
+
+Card <|-- Action
+Card <|-- Friend
+Card <|-- Hide
+Card <|-- Hunter
+Card <|-- Monster
+Card <|-- SearchCard
+Action <|-- Villager
+Action <|-- RumorsCard
+Action <|-- TheftCard
+Card <|-- InvestigationCard
+Card <|-- GossipCard
+Card <|-- FogCard
+Card <|-- TradeCard
+Card <|-- HoundCard
+Friend <|-- FriendCard
+Hide <|-- HideCard
+Hunter <|-- HunterCard
+Monster <|-- VampireCard
+Monster <|-- KumihoCard
+Monster <|-- WerewolfCard
+Monster <|-- MandragoraCard
+Monster <|-- MermaidCard
+Card --> CardRole
+Card --> CardEffect
+@enduml
+
+@startuml
+title final3 — хранение результатов
+!theme plain
+top to bottom direction
+skinparam classAttributeIconSize 0
+hide empty members
+
+package "game.data" {
+    interface GameRepository {
+        + registerPlayer(name: String): Unit
+        + writeGame(result: GameResult): Int
+        + getHistory(): List<StoredGame>
+        + getStats(): List<PlayerStatistics>
+        + deleteGame(gameId: Int): Boolean
+    }
+    class SqliteGameRepository {
+        - database: Database
+        + SqliteGameRepository(databasePath: String)
+        + registerPlayer(name: String): Unit
+        + writeGame(result: GameResult): Int
+        + getHistory(): List<StoredGame>
+        + getStats(): List<PlayerStatistics>
+        + deleteGame(gameId: Int): Boolean
+        - findOrCreatePlayer(name: String): Int
+        - readGame(row: ResultRow): StoredGame
+    }
+    class StoredGame <<data>> {
+        + id: Int
+        + playedAt: Long
+        + players: List<StoredPlayerResult>
+        + history: List<List<MoveLog>>
+    }
+    class StoredPlayerResult <<data>> {
+        + uid: Int
+        + name: String
+        + score: Int
+        + winner: Boolean
+    }
+    class PlayerStatistics <<data>> {
+        + name: String
+        + gamesPlayed: Int
+        + wins: Int
+        + totalScore: Int
+        + averageScore: Double {readOnly}
+    }
+    class StoredMove <<private data>> {
+        + round: Int
+        + number: Int
+        + log: MoveLog
+    }
+    class PlayerGameRecord <<internal data>> {
+        + name: String
+        + score: Int
+        + winner: Boolean
+    }
+    class StatisticsCalculator <<internal object>> {
+        + calculate(records: List<PlayerGameRecord>, playerNames: Collection<String>): List<PlayerStatistics>
+    }
+    class GamesTable <<internal object>> {
+        + id: Column<Int>
+        + playedAt: Column<Long>
+        + primaryKey: PrimaryKey
+    }
+    class PlayersTable <<internal object>> {
+        + id: Column<Int>
+        + name: Column<String>
+        + primaryKey: PrimaryKey
+    }
+    class GamePlayersTable <<internal object>> {
+        + gameId: Column<Int>
+        + playerId: Column<Int>
+        + playerUid: Column<Int>
+        + score: Column<Int>
+        + winner: Column<Boolean>
+        + primaryKey: PrimaryKey
+    }
+    class MovesTable <<internal object>> {
+        + id: Column<Int>
+        + gameId: Column<Int>
+        + roundNumber: Column<Int>
+        + moveNumber: Column<Int>
+        + initiatorUid: Column<Int>
+        + targetUid: Column<Int?>
+        + cardName: Column<String>
+        + primaryKey: PrimaryKey
+    }
+}
+
+class GameResult
+class MoveLog
+class Database
+class ResultRow
+class Table
+class Column<T>
+class PrimaryKey
+SqliteGameRepository ..|> GameRepository
+SqliteGameRepository --> GamesTable
+SqliteGameRepository --> PlayersTable
+SqliteGameRepository --> GamePlayersTable
+SqliteGameRepository --> MovesTable
+SqliteGameRepository --> StatisticsCalculator
+SqliteGameRepository --> StoredGame
+SqliteGameRepository --> StoredMove
+StatisticsCalculator --> PlayerGameRecord
+StatisticsCalculator --> PlayerStatistics
+StoredGame --> StoredPlayerResult
+StoredGame --> MoveLog
+Table <|-- GamesTable
+Table <|-- PlayersTable
+Table <|-- GamePlayersTable
+Table <|-- MovesTable
+@enduml
+
+@startuml
+title Схема базы данных SQLite
+!theme plain
+hide methods
+
+entity games {
+    * id : INTEGER <<PK>>
+    --
+    played_at : BIGINT
+}
+
+entity players {
+    * id : INTEGER <<PK>>
+    --
+    name : VARCHAR(100) <<UQ>>
+}
+
+entity game_players {
+    * game_id : INTEGER <<PK, FK>>
+    * player_id : INTEGER <<PK, FK>>
+    --
+    player_uid : INTEGER
+    score : INTEGER
+    winner : BOOLEAN
+}
+
+entity moves {
+    * id : INTEGER <<PK>>
+    --
+    game_id : INTEGER <<FK>>
+    round_number : INTEGER
+    move_number : INTEGER
+    initiator_uid : INTEGER
+    target_uid : INTEGER?
+    card_name : VARCHAR(100)
+}
+
+games ||--o{ game_players
+players ||--o{ game_players
+games ||--o{ moves
+@enduml
+
+@startuml
+title final3 — классы графического интерфейса
+!theme plain
+top to bottom direction
+skinparam classAttributeIconSize 0
+hide empty members
+
+package "game.ui" {
+    class DesktopMainKt <<точка входа>> {
+        + main(): Unit
+    }
+    class DesktopWindow {
+        - controller: DesktopGameController
+        - tabs: JTabbedPane
+        - lobby: JPanel
+        - table: JPanel
+        - nameField: JTextField
+        - render(): Unit
+        - renderLobby(): Unit
+        - renderGame(): Unit
+        - play(index: Int): Unit
+        - choosePlayer(prompt: String, players: List<Player>): Player?
+        - chooseCards(player: Player, played: Card?, max: Int): List<Card>?
+        - chooseDetails(card: Card, actor: Player, target: Player?, players: List<Player>, turn: Int): MoveDetails?
+    }
+    class DesktopGameController {
+        - repository: GameRepository
+        - gameFactory: (List<Player>) -> Game
+        + players: List<PlayerStatistics>
+        + history: List<StoredGame>
+        + selectedNames: Set<String>
+        + game: Game?
+        + handVisible: Boolean
+        + refresh(): Unit
+        + addPlayer(name: String): Unit
+        + removePlayer(name: String): Unit
+        + startGame(): Unit
+        + revealHand(): Unit
+        + visibleCards(): List<Card>
+        + hideHand(): Unit
+        + submitMove(cardIndex: Int, targetUid: Int?, details: MoveDetails): GameMoveResult
+        + returnToLobby(): Unit
+    }
+}
+
+package "game.domain" {
+    class Game
+    class Move
+}
+
+package "game.data" {
+    interface GameRepository
+    class SqliteGameRepository
+}
+
+DesktopMainKt --> DesktopWindow : создаёт на Swing EDT
+DesktopMainKt --> DesktopGameController : создаёт
+DesktopMainKt --> SqliteGameRepository : создаёт
+DesktopWindow --> DesktopGameController : клики и чтение состояния
+DesktopGameController --> Game : создаёт и передаёт Move
+DesktopGameController --> GameRepository : игроки, история, результат
+SqliteGameRepository ..|> GameRepository
+Game --> Move
+@enduml
+
+@startuml
+title final3 — последовательность хода через GUI
+!theme plain
+
+actor Игрок
+participant DesktopWindow
+participant DesktopGameController
+participant Game
+participant Round
+participant CardEffectHandler
+participant GameRepository
+database SQLite
+
+Игрок -> DesktopWindow : вводит имя
+DesktopWindow -> DesktopGameController : addPlayer(name)
+DesktopGameController -> GameRepository : registerPlayer(name), если имя новое
+GameRepository -> SQLite : сохранить профиль
+DesktopWindow -> DesktopWindow : renderLobby()
+
+Игрок -> DesktopWindow : начинает партию
+DesktopWindow -> DesktopGameController : startGame()
+DesktopGameController -> Game : создать Game(players)
+Game -> Round : создать раунд и раздать карты
+
+Игрок -> DesktopWindow : открывает руку и выбирает карту
+DesktopWindow -> DesktopGameController : revealHand(), submitMove(...)
+DesktopGameController -> Game : processGameMove(Move)
+Game -> Round : checkMove(move)
+Game -> CardEffectHandler : validate(move), apply(move)
+Game -> Round : recordMove(move)
+Game --> DesktopGameController : результат хода
+
+alt партия завершена
+    DesktopGameController -> Game : getResult()
+    DesktopGameController -> GameRepository : writeGame(result)
+    GameRepository -> SQLite : сохранить партию и ходы
+    DesktopGameController -> GameRepository : getHistory(), getStats()
+end
+
+DesktopGameController --> DesktopWindow : обновлённое состояние
+DesktopWindow -> DesktopWindow : render()
+@enduml
